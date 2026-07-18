@@ -1,0 +1,32 @@
+name: wake
+# Starts stopped codespaces named in the WAKE_TARGETS secret (comma-separated).
+# Public repo = unmetered hosted minutes. Nothing identifying lives in this file:
+# targets and token are repository secrets (masked in logs, write-only store).
+on:
+  workflow_dispatch:
+permissions: {}
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: start stopped targets
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TARGETS: ${{ secrets.WAKE_TARGETS }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_PAT:-}" ] || { echo "secret GH_PAT missing"; exit 1; }
+          [ -n "${TARGETS:-}" ] || { echo "secret WAKE_TARGETS missing (comma-separated codespace names)"; exit 1; }
+          i=0
+          IFS=',' read -ra CS <<< "$TARGETS"
+          for name in "${CS[@]}"; do
+            name="$(echo "$name" | tr -d ' ')"; i=$((i+1))
+            state=$(curl -sf -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/user/codespaces/$name" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state","?"))' || echo unreachable)
+            echo "target $i: state=$state"
+            case "$state" in
+              Shutdown|Stopped)
+                curl -sf -X POST -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/user/codespaces/$name/start" >/dev/null && echo "target $i: start requested" ;;
+            esac
+          done
