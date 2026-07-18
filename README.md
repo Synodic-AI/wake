@@ -33,17 +33,31 @@ embed/serve.py               local-first embedder with a hosted fallback
 embed/requirements.txt       model deps (cached on the runner's storage)
 ```
 
-## Bring up a runner (2-core, free)
+## How it works (Codespaces path — the primary spine)
 
-Any of these give a free/near-free 2-core Linux box; the bootstrap is identical on
-all of them. Pick one:
+1. **`WAKE_TARGETS`** (a repo secret, backed by Doppler) holds the comma-separated
+   Codespace name(s) that run the embed model. Placeholder today: `wake-runner` —
+   rotate it to the real name from `gh codespace list --json name` (a Codespace's
+   name is an auto-generated slug, not a label you pick).
+2. **`.github/workflows/wake.yml`** (dispatch-only, on free public-repo hosted
+   minutes) starts any stopped target Codespace via the GitHub API using `GH_PAT`.
+   Trigger it: Actions tab → **wake** → Run workflow, or `gh workflow run wake.yml`.
+3. The Codespace boots from **`.devcontainer/devcontainer.json`** (2-core), installs
+   Doppler + embed deps, and reads a `DOPPLER_TOKEN` **Codespaces secret**. The
+   SessionStart hook hydrates every other secret. Run the embed with
+   `doppler run -- bash scripts/embed_run.sh`.
+4. When idle, the Codespace **auto-suspends** (Settings → Codespaces → idle timeout) —
+   that's the "timed shutdown," and it costs nothing while stopped. Education/Pro
+   core-hours cover it.
 
-- **Oracle Cloud Always Free** — Ampere ARM, genuinely free forever, no timer needed.
-- **Azure for Students** — $100 credit + free-tier VMs (you already have Azure creds in Doppler).
-- **GitHub Codespaces** (Education = free core-hours) — on-demand, auto-suspends when idle = built-in "timed shutdown."
-- **GCP `e2-micro`** Always Free, or home hardware.
+Required secrets: `WAKE_TARGETS` and `GH_PAT` (needs **codespace** scope) as repo
+secrets — both set — plus a `DOPPLER_TOKEN` Codespaces secret for the box.
 
-Then, **on the box**:
+### Alternative: self-hosted runner on any free 2-core box
+
+If you'd rather not use Codespaces, `scripts/runner-bootstrap.sh` brings up an
+**ephemeral** GitHub Actions runner (Oracle Always Free / Azure for Students / GCP /
+home hardware) that runs `.github/workflows/embed.yml`:
 
 ```bash
 git clone https://github.com/Synodic-AI/wake.git && cd wake
@@ -53,9 +67,7 @@ export DOPPLER_SERVICE_TOKEN=dp.st.dev.xxxxx     # read-only, box-local Doppler 
 ./scripts/runner-bootstrap.sh --shutdown-after   # spin up -> run one job -> power off
 ```
 
-`--ephemeral` + `--shutdown-after` is the scale-to-zero shape: the runner takes one
-job, deregisters, and powers the box down, so it costs nothing between jobs. Trigger
-work from the Actions tab ("Run workflow") or `gh workflow run embed.yml`.
+Same Doppler backplane; `--shutdown-after` gives the same scale-to-zero behavior.
 
 ## Doppler (the secret backplane)
 

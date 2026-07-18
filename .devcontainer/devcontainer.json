@@ -1,0 +1,12 @@
+{
+  "name": "wake-embed",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "hostRequirements": { "cpus": 2 },
+  "onCreateCommand": "bash scripts/cloud-setup.sh && pip install -r embed/requirements.txt",
+  "postAttachCommand": "echo 'wake embed box ready — run:  doppler run -- bash scripts/embed_run.sh'",
+  "secrets": {
+    "DOPPLER_TOKEN": {
+      "description": "Doppler service token (dp.st.dev.…). Hydrates all other secrets via the SessionStart hook."
+    }
+  }
+}
