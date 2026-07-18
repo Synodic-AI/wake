@@ -1,0 +1,9 @@
+out/
+_work/
+venv/
+*.parquet
+*.jsonl
+actions-runner-*.tar.gz
+.doppler/
+__pycache__/
+*.pyc

@@ -1,0 +1,47 @@
+name: embed
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_glob:
+        description: "Glob of text files to embed (relative to repo root)"
+        required: false
+        default: "data/**/*.txt"
+  push:
+    branches: [main]
+    paths:
+      - "embed/**"
+      - "scripts/embed_run.sh"
+      - ".github/workflows/embed.yml"
+  # NOTE: intentionally NO pull_request trigger. This is a PUBLIC repo bound to a
+  # self-hosted runner; running fork-PR code on your hardware would hand a stranger
+  # your box + Doppler secrets. See README "Security" before adding any PR trigger.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: embed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  embed:
+    # Defense in depth: never execute a forked head even if a trigger is added later.
+    if: ${{ github.event.pull_request.head.repo.fork != true }}
+    runs-on: [self-hosted, embed]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Doppler CLI
+        run: command -v doppler >/dev/null 2>&1 || (curl -Ls --tlsv1.2 --proto "=https" https://cli.doppler.com/install.sh | sh)
+
+      # DOPPLER_TOKEN is only needed if the runner box is NOT already
+      # `doppler configure`d. Box-local auth (recommended) => delete this env line.
+      # INPUT_GLOB is routed through env (not interpolated into the run: line) so a
+      # crafted dispatch value can't inject shell — matters doubly on a self-hosted box.
+      - name: Embed (secrets injected locally by Doppler; zero GitHub API calls)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          INPUT_GLOB: ${{ github.event.inputs.input_glob || 'data/**/*.txt' }}
+        run: doppler run -- bash scripts/embed_run.sh "$INPUT_GLOB"

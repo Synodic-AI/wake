@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v doppler >/dev/null 2>&1 && doppler secrets download --no-file --format env >> \"$CLAUDE_ENV_FILE\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

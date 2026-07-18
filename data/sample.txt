@@ -1,0 +1,2 @@
+wake is a self-hosted, scale-to-zero embedding runner. This sample text exists so
+the embed job produces output on the very first dispatch.
