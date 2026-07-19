@@ -1,0 +1,49 @@
+name: runner
+# On-demand queue drain: registers an EPHEMERAL self-hosted runner (labels:
+# self-hosted,linux) to each repo named in the RUNNER_TARGETS secret
+# (comma-separated owner/name), runs queued jobs until the queue is empty,
+# then deregisters. Hosted public-repo minutes = free. Nothing identifying
+# lives in this file: targets and token are secrets; logs print indices only.
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: runner
+  cancel-in-progress: false
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: drain queues
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TARGETS: ${{ secrets.RUNNER_TARGETS }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_PAT:-}" ] || { echo "secret GH_PAT missing"; exit 1; }
+          [ -n "${TARGETS:-}" ] || { echo "secret RUNNER_TARGETS missing (comma-separated owner/name)"; exit 1; }
+          api() { curl -sf -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "$@"; }
+          VER=2.328.0
+          curl -fsSL -o r.tgz "https://github.com/actions/runner/releases/download/v${VER}/actions-runner-linux-x64-${VER}.tar.gz"
+          mkdir -p rdir && tar xzf r.tgz -C rdir
+          i=0
+          IFS=',' read -ra RS <<< "$TARGETS"
+          for R in "${RS[@]}"; do
+            R="$(echo "$R" | tr -d ' ')"; [ -n "$R" ] || continue; i=$((i+1))
+            queued() { api "https://api.github.com/repos/$R/actions/runs?status=queued&per_page=1" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("total_count",0))' 2>/dev/null || echo 0; }
+            q=$(queued); echo "target $i: $q queued"
+            [ "$q" = "0" ] && continue
+            passes=0
+            while [ "$(queued)" != "0" ] && [ $passes -lt 60 ]; do
+              passes=$((passes+1))
+              REG=$(api -X POST "https://api.github.com/repos/$R/actions/runners/registration-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') \
+                || { echo "target $i: registration token refused (PAT scope)"; break; }
+              ( cd rdir && ./config.sh --unattended --replace --ephemeral \
+                  --url "https://github.com/$R" --token "$REG" \
+                  --name "d-$i-$passes" --labels "self-hosted,linux" --work _w >/dev/null 2>&1 \
+                && timeout 25m ./run.sh >/dev/null 2>&1 || true )
+              echo "target $i: pass $passes done, $(queued) queued"
+            done
+          done
+          echo "drain complete"
