@@ -18,7 +18,7 @@ REG_TOKEN="${REG_TOKEN:?set REG_TOKEN (repo Actions runner registration token)}"
 LABELS="${LABELS:-embed}"
 NAME="${RUNNER_NAME:-wake-$(hostname)-$$}"
 WORKDIR="${RUNNER_WORKDIR:-$HOME/wake-runner}"
-RUNNER_VER="${RUNNER_VER:-2.328.0}"   # bump if the download 404s
+RUNNER_VER="${RUNNER_VER:-$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))' 2>/dev/null || echo 2.335.1)}"   # latest; pinned versions get deprecated and go deaf
 SHUTDOWN_AFTER=0
 [ "${1:-}" = "--shutdown-after" ] && SHUTDOWN_AFTER=1
 

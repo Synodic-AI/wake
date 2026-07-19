@@ -25,7 +25,8 @@ jobs:
           TARGETS="$(echo "$TARGETS" | tr ',' '\n' | sed '/^ *$/d' | sort -u | paste -sd, -)"
           [ -n "${TARGETS:-}" ] || { echo "no runner targets set (RUNNER_TARGETS / WAKE_RUNNER_TARGETS)"; exit 1; }
           api() { curl -sf -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "$@"; }
-          VER=2.328.0
+          VER=$(api "https://api.github.com/repos/actions/runner/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))')
+          echo "runner version: $VER"
           curl -fsSL -o r.tgz "https://github.com/actions/runner/releases/download/v${VER}/actions-runner-linux-x64-${VER}.tar.gz"
           mkdir -p rdir && tar xzf r.tgz -C rdir
           i=0
