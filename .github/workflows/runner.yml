@@ -40,10 +40,13 @@ jobs:
               passes=$((passes+1))
               REG=$(api -X POST "https://api.github.com/repos/$R/actions/runners/registration-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') \
                 || { echo "target $i: registration token refused (PAT scope)"; break; }
-              ( cd rdir && ./config.sh --unattended --replace --ephemeral \
-                  --url "https://github.com/$R" --token "$REG" \
-                  --name "d-$i-$passes" --labels "self-hosted,linux" --work _w >/dev/null 2>&1 \
-                && timeout 25m ./run.sh >/dev/null 2>&1 || true )
+              W="w-$i-$passes"; cp -r rdir "$W"
+              ( cd "$W" \
+                && ./config.sh --unattended --replace --ephemeral --disableupdate \
+                     --url "https://github.com/$R" --token "$REG" \
+                     --name "d-$i-$passes" --labels "self-hosted,linux" --work _w 2>&1 | grep -aiE "error|fail|invalid|http" | head -3 \
+                ; timeout 25m ./run.sh 2>&1 | grep -aiE "listening|running job|completed|error|fail" | head -6 ) || true
+              rm -rf "$W"
               echo "target $i: pass $passes done, $(queued) queued"
             done
           done
