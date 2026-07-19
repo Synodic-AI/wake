@@ -35,19 +35,19 @@ jobs:
             queued() { api "https://api.github.com/repos/$R/actions/runs?status=queued&per_page=1" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("total_count",0))' 2>/dev/null || echo 0; }
             q=$(queued); echo "target $i: $q queued"
             [ "$q" = "0" ] && continue
-            passes=0
-            while [ "$(queued)" != "0" ] && [ $passes -lt 60 ]; do
-              passes=$((passes+1))
-              REG=$(api -X POST "https://api.github.com/repos/$R/actions/runners/registration-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') \
-                || { echo "target $i: registration token refused (PAT scope)"; break; }
-              W="w-$i-$passes"; cp -r rdir "$W"
-              ( cd "$W" \
-                && ./config.sh --unattended --replace --ephemeral --disableupdate \
-                     --url "https://github.com/$R" --token "$REG" \
-                     --name "d-$i-$passes" --labels "self-hosted,linux" --work _w 2>&1 | grep -aiE "error|fail|invalid|http" | head -3 \
-                ; timeout 25m ./run.sh 2>&1 | grep -aiE "listening|running job|completed|error|fail" | head -6 ) || true
-              rm -rf "$W"
-              echo "target $i: pass $passes done, $(queued) queued"
-            done
+            REG=$(api -X POST "https://api.github.com/repos/$R/actions/runners/registration-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') \
+              || { echo "target $i: registration token refused (PAT scope)"; continue; }
+            ( cd rdir && ./config.sh --unattended --replace --disableupdate \
+                --url "https://github.com/$R" --token "$REG" \
+                --name "drain-$i" --labels "self-hosted,linux" --work _w 2>&1 | grep -aiE "error|fail|invalid|http|success" | head -4 )
+            sleep 8
+            api "https://api.github.com/repos/$R/actions/runners?per_page=10" | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          for k,x in enumerate(d.get("runners",[])): print(f"target runner {k+1}: status={x[\"status\"]} busy={x[\"busy\"]} labels={len(x.get(\"labels\",[]))}")' || true
+            ( cd rdir && timeout 45m ./run.sh 2>&1 | grep -aiE "listening|running|completed|error|fail" | head -40 ) || true
+            REM=$(api -X POST "https://api.github.com/repos/$R/actions/runners/remove-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' 2>/dev/null || true)
+            [ -n "${REM:-}" ] && ( cd rdir && ./config.sh remove --token "$REM" >/dev/null 2>&1 || true )
+            echo "target $i: listener done, $(queued) queued"
           done
           echo "drain complete"
