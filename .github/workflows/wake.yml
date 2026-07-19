@@ -12,11 +12,12 @@ jobs:
       - name: start stopped targets
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
-          TARGETS: ${{ secrets.WAKE_TARGETS }}
+          TARGETS: ${{ secrets.WAKE_TARGETS }},${{ secrets.RUNNER_TARGETS }}
         run: |
           set -euo pipefail
           [ -n "${GH_PAT:-}" ] || { echo "secret GH_PAT missing"; exit 1; }
-          [ -n "${TARGETS:-}" ] || { echo "secret WAKE_TARGETS missing (comma-separated codespace names)"; exit 1; }
+          TARGETS="$(echo "$TARGETS" | tr ',' '\n' | sed '/^ *$/d' | paste -sd, -)"
+          [ -n "${TARGETS:-}" ] || { echo "no targets set (WAKE_TARGETS / RUNNER_TARGETS)"; exit 1; }
           i=0
           IFS=',' read -ra CS <<< "$TARGETS"
           for name in "${CS[@]}"; do
